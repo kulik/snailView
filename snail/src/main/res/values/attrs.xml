@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="SnailAdapterView">
+        <attr name="snail_deep" format="integer"/>
+        <attr name="snail_padding" format="dimension"/>
+    </declare-styleable>
+</resources>
