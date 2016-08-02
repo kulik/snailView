@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="10dp"
     >
 
 <TextView
@@ -12,11 +11,10 @@
     android:layout_height="match_parent"
     tools:text="1"
     android:gravity="center"
-    android:layout_margin="10dp"
     android:layout_gravity="center"
     android:textSize="28sp"
     tools:background="@android:color/holo_purple"
     >
 
 </TextView>
-</FrameLayout>
+</RelativeLayout>

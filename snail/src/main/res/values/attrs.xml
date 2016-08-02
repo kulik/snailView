@@ -3,5 +3,6 @@
     <declare-styleable name="SnailAdapterView">
         <attr name="snail_deep" format="integer"/>
         <attr name="snail_padding" format="dimension"/>
+        <attr name="snail_infinity_layout" format="reference"/>
     </declare-styleable>
 </resources>

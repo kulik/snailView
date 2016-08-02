@@ -1,14 +1,24 @@
 package com.tac.kulik.snail;
 
+import android.animation.Animator;
+import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
 import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.res.TypedArray;
+import android.database.DataSetObserver;
 import android.os.Build;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.animation.Interpolator;
+import android.view.animation.LinearInterpolator;
 import android.widget.AdapterView;
 import android.widget.BaseAdapter;
+
+import java.util.ArrayList;
 
 /**
  * Created by kulik on 29.07.16.
@@ -37,26 +47,93 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
             0.6f + 0.4f * 0.4f * 0.6f,
     };
 
-//    int [] padCooficient = new int[] {
-//            0,
-//            1
-//    }
-
     private static final String TAG = SnailAdapterView.class.getSimpleName();
-    private static final int[] ATTR_ARRAY = new int[]{
-            android.R.attr.layout_width, // 0
-            android.R.attr.layout_height, // 1
-            R.attr.snail_deep, // 2
-            R.attr.snail_padding, // 3
-    };
     private static final int DEFAULT_SHAIL_SIZE = 7;
     private BaseAdapter mAdapter;
     private int mMaxVisibleItemsQuantity;
+    private int mMaxAnimatableItemsQuantity;
     private int mItemPadding;
-
+    private int mPosition;
     //    private final LinkedList<View> mItemViews = new LinkedList<View>();
     private Context mCtx;
-    private int mOffset;
+
+    private AnimatorSet mMoveAnimation = new AnimatorSet();
+    private ObjectAnimator mLayoutAnimator = new ObjectAnimator();
+    private ObjectAnimator mInvalidateAnimator = new ObjectAnimator();
+    private ObjectAnimator mStubAnimator = new ObjectAnimator();
+
+
+    //    private static Interpolator sOversotInterpolator = new OvershootInterpolator(3f);
+    private static Interpolator sMoveInterpolator = new LinearInterpolator();
+    //            private static Interpolator sMoveInterpolator = new OvershootInterpolator(3f);
+//    private static Interpolator sFinishingInterpolator = new DecelerateInterpolator(3f);
+    private boolean isAnimateInfininy = false;
+    private View mInfinitieView;
+    private ArrayList<View> mAnimatedObjectsList;
+
+    private class LayoutParams extends ViewGroup.LayoutParams {
+        private ObjectAnimator mExpandDirX = new ObjectAnimator();
+        private ObjectAnimator mExpandDirY = new ObjectAnimator();
+        private ObjectAnimator mWidthAnimator = new ObjectAnimator();
+        private ObjectAnimator mHeightAnimator = new ObjectAnimator();
+
+        private int mPosition;
+
+//        private boolean animationsSetToPlay;
+
+        public LayoutParams(ViewGroup.LayoutParams source) {
+            super(source);
+//TODO refactor it to ViewHolerProperty...
+            mWidthAnimator.setTarget(this);
+            mWidthAnimator.setPropertyName("widtha");
+            mHeightAnimator.setTarget(this);
+            mHeightAnimator.setPropertyName("heighta");
+            mExpandDirX.setProperty(View.X);
+            mExpandDirY.setProperty(View.Y);
+        }
+
+        public void setWidtha(float w) {
+            width = (int) w;
+//            requestLayout();
+        }
+
+        public void setHeighta(float h) {
+            height = (int) h;
+            //todo add extra animator just for requesting layout to prevent extra requesting
+//            requestLayout();
+        }
+
+        public float getWidtha() {
+            return width;
+        }
+
+        public float getHeighta() {
+            return height;
+        }
+
+    }
+
+    @Override
+    protected ViewGroup.LayoutParams generateDefaultLayoutParams() {
+        return new LayoutParams(super.generateDefaultLayoutParams());
+    }
+
+    @Override
+    public ViewGroup.LayoutParams generateLayoutParams(AttributeSet attrs) {
+        return new LayoutParams(super.generateLayoutParams(attrs));
+    }
+
+    @Override
+    protected ViewGroup.LayoutParams generateLayoutParams(ViewGroup.LayoutParams p) {
+        return new LayoutParams(super.generateLayoutParams(p));
+    }
+
+    @Override
+    protected boolean checkLayoutParams(ViewGroup.LayoutParams p) {
+        return super.checkLayoutParams(p);
+    }
+
+    private DataSetObserver mDataSetObserver;
 
     public SnailAdapterView(Context context) {
         super(context);
@@ -82,11 +159,91 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
     private void init(Context context, AttributeSet attributeSet) {
         mCtx = context;
         TypedArray attr = context.obtainStyledAttributes(attributeSet, R.styleable.SnailAdapterView);
-//        mLayoutWidth = attr.getDimensionPixelSize(0, LayoutParams.MATCH_PARENT);
-//        mLayoutHeight = attr.getDimensionPixelSize(1, LayoutParams.MATCH_PARENT);
         mMaxVisibleItemsQuantity = attr.getInt(R.styleable.SnailAdapterView_snail_deep, DEFAULT_SHAIL_SIZE);
         mItemPadding = attr.getDimensionPixelSize(R.styleable.SnailAdapterView_snail_padding, mCtx.getResources().getDimensionPixelSize(R.dimen.defoultPadding));
+        mItemPadding = attr.getDimensionPixelSize(R.styleable.SnailAdapterView_snail_padding, mCtx.getResources().getDimensionPixelSize(R.dimen.defoultPadding));
+        int resourceId = attr.getResourceId(R.styleable.SnailAdapterView_snail_infinity_layout, -1);
+        if (resourceId != -1) {
+            mInfinitieView = (LayoutInflater.from(context)).inflate(resourceId, null);
+        }
         attr.recycle();
+        mMaxAnimatableItemsQuantity = (!isAnimateInfininy) ? mMaxVisibleItemsQuantity - 1 : mMaxVisibleItemsQuantity;
+        mAnimatedObjectsList = new ArrayList<View>();
+        mMoveAnimation.setInterpolator(sMoveInterpolator);
+
+        mLayoutAnimator.setPropertyName("request");
+        mLayoutAnimator.setFloatValues(0, 1f);
+        mLayoutAnimator.setTarget(this);
+        mInvalidateAnimator.setPropertyName("invalidate");
+        mInvalidateAnimator.setTarget(this);
+        mInvalidateAnimator.setFloatValues(0, 1f);
+        mStubAnimator.setFloatValues(0, 1f);
+    }
+
+    public float getRequest() {
+        return 0;
+    }
+
+    public void setRequest(float w) {
+        requestLayout();
+    }
+
+    public void setInvalidate(float w) {
+        if (w == 1f) {
+            reinitChild();
+//            remesureAllChilds();
+        }
+    }
+
+
+    private Animator.AnimatorListener mAnimationListener = new Animator.AnimatorListener() {
+        @Override
+        public void onAnimationStart(Animator animation) {
+
+        }
+
+        @Override
+        public void onAnimationEnd(Animator animation) {
+            mMoveAnimation.removeAllListeners();
+//            mMoveAnimation.end();
+
+            Log.d(TAG, "onAnimationEnd");
+            if (mPosition != mScrollTo) {
+                setSelection(mScrollTo);
+            }
+//            requestLayout();
+        }
+
+
+        @Override
+        public void onAnimationCancel(Animator animation) {
+            Log.d(TAG, "onAnimationCancel");
+        }
+
+        @Override
+        public void onAnimationRepeat(Animator animation) {
+
+        }
+    };
+
+    private void reinitChild() {
+//        for (int i = 0; i < mAnimatedObjectsList.size(); i++) {
+        int index = (mPosition - 1) % mMaxAnimatableItemsQuantity;
+        final int i = (mPosition + mMaxAnimatableItemsQuantity - 1) % mAdapter.getCount();
+        View v = mAdapter.getView((i) % mAdapter.getCount(), mAnimatedObjectsList.get(index == -1 ? index + mMaxAnimatableItemsQuantity : index), null);
+        measureChild(v, mMaxAnimatableItemsQuantity - 1);
+        ((LayoutParams) v.getLayoutParams()).mPosition = i;
+
+        v.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                OnItemClickListener onItemClickListener = getOnItemClickListener();
+                if (onItemClickListener != null) {
+                    onItemClickListener.onItemClick(SnailAdapterView.this, v, i, -1);
+                }
+            }
+        });
+        requestLayout();
     }
 
     @Override
@@ -96,7 +253,37 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
 
     @Override
     public void setAdapter(BaseAdapter adapter) {
+        if (mAdapter != null) {
+            mAdapter.unregisterDataSetObserver(mDataSetObserver);
+        }
+
         mAdapter = adapter;
+        initAdapter();
+
+        if (mDataSetObserver == null) {
+            mDataSetObserver = new DataSetObserver() {
+                @Override
+                public void onChanged() {
+                    initScroller();
+                    onDataChange();
+                }
+
+                @Override
+                public void onInvalidated() {
+                    onDataInvalidated();
+                }
+            };
+        }
+        mAdapter.registerDataSetObserver(mDataSetObserver);
+    }
+
+    private void initScroller() {
+
+    }
+
+    protected void initAdapter() {
+        removeAllViewsInLayout();
+        requestLayout();
     }
 
     @Override
@@ -109,52 +296,152 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
         if (changed) {
             mAdapter.notifyDataSetChanged();
             fillList();
-            layoutsItems();
         }
+        measureItems();
+        layoutsItems();
+    }
+
+    private void measureItems() {
+//        for (int i = mPosition; i < mPosition+ mMaxAnimatableItemsQuantity; i++) {
+//
+//            View newChild = mAnimatedObjectsList.get(i% mMaxAnimatableItemsQuantity);
+//            measureChild(newChild, i% mMaxAnimatableItemsQuantity);
+//        }
     }
 
     @Override
     public View getSelectedView() {
-        return null;
+        return mAnimatedObjectsList.get(mPosition);
     }
+
+    int mScrollTo = 0;
 
     @Override
     public void setSelection(int position) {
-        mOffset = position;
+        //TODO start scrolling
+        mScrollTo = position;
+        if (mMoveAnimation != null) {
+            mMoveAnimation.removeAllListeners();
+            if (mMoveAnimation.isRunning()) {
+                mMoveAnimation.end();
+                mMoveAnimation.cancel();
+                mMoveAnimation = null;
+            }
+        }
+        mMoveAnimation = new AnimatorSet();
+        mMoveAnimation.setInterpolator(sMoveInterpolator);
+        mInvalidateAnimator.setDuration(0);
+        View to = mAnimatedObjectsList.get(0);
 
+        LayoutParams layoutParams = (LayoutParams) to.getLayoutParams();
+        AnimatorSet.Builder play = mMoveAnimation.play(mStubAnimator);
+
+        for (int i = 1; i < mMaxAnimatableItemsQuantity; i++) {
+            View witch = mAnimatedObjectsList.get(i);
+            animate(to, play, witch);
+            to = witch;
+        }
+        View witch = mAnimatedObjectsList.get(0);
+        animate(to, play, witch);
+        play.with(mLayoutAnimator).before(mInvalidateAnimator);
+        mMoveAnimation.addListener(mAnimationListener);
+        mMoveAnimation.start();
+
+        mPosition++;
+        if (mPosition == mAdapter.getCount()) {
+            mPosition = 0;
+        }
+
+    }
+
+    private void animate(View to, AnimatorSet.Builder play, View witch) {
+        LayoutParams layoutParams;
+        layoutParams = (LayoutParams) witch.getLayoutParams();
+        layoutParams.mExpandDirX.setFloatValues(witch.getX(), to.getX());
+        layoutParams.mExpandDirY.setFloatValues(witch.getY(), to.getY());
+        layoutParams.mHeightAnimator.setFloatValues(witch.getLayoutParams().height, to.getLayoutParams().height);
+        layoutParams.mWidthAnimator.setFloatValues(witch.getLayoutParams().width, to.getLayoutParams().width);
+
+        layoutParams.mExpandDirX.setTarget(witch);
+        layoutParams.mExpandDirY.setTarget(witch);
+
+        play.with(layoutParams.mExpandDirX);
+        play.with(layoutParams.mExpandDirY);
+        play.with(layoutParams.mWidthAnimator);
+        play.with(layoutParams.mHeightAnimator);
     }
 
     private void fillList() {
         Log.i(TAG, "fillList()");
         View newChild = null;
         removeAllViewsInLayout();
+        mAnimatedObjectsList.clear();
 
-        int needAdd = Math.min(mAdapter.getCount(), mMaxVisibleItemsQuantity);
+        int needAdd = Math.min(mAdapter.getCount(), mMaxAnimatableItemsQuantity);
+
         for (int i = 0; i < needAdd; i++) {
             newChild = mAdapter.getView(i, null, this);
-//            mItemViews.add(newChild);
+            mAnimatedObjectsList.add(newChild);
 
+            ViewGroup.LayoutParams layoutParams = newChild.getLayoutParams();
+            LayoutParams params;
+            if (layoutParams == null) {
+                params = (LayoutParams) generateDefaultLayoutParams();
+            } else {
+                params = (LayoutParams) generateLayoutParams(layoutParams);
+            }
+            newChild.setLayoutParams(params);
+
+            final int finalI = i;
+            newChild.setOnClickListener(new OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    OnItemClickListener onItemClickListener = getOnItemClickListener();
+                    if (onItemClickListener != null) {
+                        onItemClickListener.onItemClick(SnailAdapterView.this, v, finalI, mAdapter.getItemId(mPosition));
+                    }
+                }
+            });
             addChildInLayout(newChild);
             measureChild(newChild, i);
         }
+        if (mInfinitieView != null) {
+            addViewInLayout(mInfinitieView, getChildCount(), generateDefaultLayoutParams());
+            measureChild(mInfinitieView, mMaxVisibleItemsQuantity - 1);
+        }
     }
 
+    @Override
+    public int getPositionForView(View view) {
+        return super.getPositionForView(view);
+    }
+    //
+//    private void remesureAllChilds() {
+//        for (int i = 0; i < getChildCount(); i++) {
+//            View child = getChildAt(i);
+//            measureChild(child, i);
+//        }
+//        requestLayout();
+//    }
+
     private void addChildInLayout(final View child) {
-        LayoutParams params = child.getLayoutParams();
+        LayoutParams params = (LayoutParams) child.getLayoutParams();
         if (params == null) {
-            params = new LayoutParams(LayoutParams.FILL_PARENT, LayoutParams.FILL_PARENT);
+            params = (LayoutParams) generateDefaultLayoutParams();
         }
         addViewInLayout(child, -1, params);
     }
 
     private void measureChild(final View child, int i) {
         Log.v(TAG, "measureChild()");
-        float w = getWidthByIndex(i, mMaxVisibleItemsQuantity) * getWidth();
-        float h = getHeightByIndex(i, mMaxVisibleItemsQuantity) * getHeight();
+        float w = getWidthByIndex(i, mMaxVisibleItemsQuantity) * getWidth() - mItemPadding;
+        float h = getHeightByIndex(i, mMaxVisibleItemsQuantity) * getHeight() - mItemPadding;
         int widthMeashure = MeasureSpec.makeMeasureSpec((int) w, MeasureSpec.EXACTLY);
         int heightMeashure = MeasureSpec.makeMeasureSpec((int) h, MeasureSpec.EXACTLY);
         if (child != null) {
             child.measure(widthMeashure, heightMeashure);
+            child.getLayoutParams().height = (int) h;
+            child.getLayoutParams().width = (int) w;
         }
     }
 
@@ -165,21 +452,19 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
     public static float getHeightByIndex(int i, int n) {
         float v = (float) (Math.pow(0.4f, (i + 1) / 2) * (((i + 4) % 2 == 0 && i < n - 1) ? 0.6f : 1f));
         //FIX ME it is anoying but tests should pass
-        return v * ((i == 6 && n == 7) ? 0.6f : 1f);
+        return v;
+//        return v * ((i == 6 && n == 7) ? 0.6f : 1f);
     }
 
     private void layoutsItems() {
         Log.v(TAG, "layoutsItems()");
         for (int i = 0, a = getChildCount(); i < a; i++) {
-//            final View child = mItemViews.get(i);
             final View child = getChildAt(i);
-//            child.layout((int)posX[i]*getWidth(),(int) posY[i]*getHeight(), width, height);
-            float r = getWidthByIndex(i, mMaxVisibleItemsQuantity) * getWidth();
-            float b = getHeightByIndex(i, mMaxVisibleItemsQuantity) * getHeight();
-//            child.layout((int)posX[i]*getWidth(),(int) posY[i]*getHeight(), r, b);
-            float l = (posX[i] * getWidth());
-            float t = (posY[i] * getHeight());
-            child.layout((int) (l + mItemPadding / 2), (int) t + mItemPadding / 2, (int) (l + r - mItemPadding / 2), (int) (t + b - mItemPadding / 2));
+            float r = child.getLayoutParams().width;
+            float b = child.getLayoutParams().height;
+            float l = (posX[i] * getWidth()) + mItemPadding / 2;
+            float t = (posY[i] * getHeight()) + mItemPadding / 2;
+            child.layout((int) l, (int) t, (int) (l + r), (int) (t + b));
         }
     }
 

@@ -10,16 +10,20 @@
     android:paddingTop="@dimen/activity_vertical_margin"
     tools:context="kulik.tac.com.snailadapterview.MainActivity">
 
-    <!--<TextView-->
-        <!--android:layout_width="wrap_content"-->
-        <!--android:layout_height="wrap_content"-->
-        <!--android:text="Hello World!" />-->
-
     <com.tac.kulik.snail.SnailAdapterView
         android:id="@+id/snailview"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         app:snail_deep="7"
-        app:snail_padding="15dp"
+        app:snail_padding="10dp"
+        app:snail_infinity_layout="@layout/infinity_item"
         ></com.tac.kulik.snail.SnailAdapterView>
+
+    <Button
+        android:id="@+id/move"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+
+        />
 </RelativeLayout>
