@@ -52,12 +52,12 @@ public class SnailAdapter extends BaseAdapter {
     @Override
     public View getView(int i, View view, ViewGroup viewGroup) {
         if (view == null) {
-//            view = View.inflate(mCtx, R.layout.temp_item, null);
-            view = View.inflate(mCtx, R.layout.device_layout, null);
+            view = View.inflate(mCtx, R.layout.temp_item, null);
+//            view = View.inflate(mCtx, R.layout.device_layout, null);
         }
-//        TextView v = (TextView) view.findViewById(R.id.tv);
-//        v.setBackgroundColor(mCtx.getResources().getColor(colors[i]));
-//        v.setText(String.valueOf(i));
+        TextView v = (TextView) view.findViewById(R.id.tv);
+        v.setBackgroundColor(mCtx.getResources().getColor(colors[i]));
+        v.setText(String.valueOf(i));
 
         return view;
     }

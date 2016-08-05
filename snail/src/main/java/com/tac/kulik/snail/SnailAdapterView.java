@@ -13,12 +13,14 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.DecelerateInterpolator;
 import android.view.animation.Interpolator;
 import android.view.animation.LinearInterpolator;
+import android.view.animation.OvershootInterpolator;
 import android.widget.AdapterView;
 import android.widget.BaseAdapter;
 
-import java.util.ArrayList;
+import java.util.LinkedList;
 
 /**
  * Created by kulik on 29.07.16.
@@ -36,15 +38,25 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
             0.4f * 0.6f
 
     };
-    float[] posY = new float[]{
+    float[] posY7 = new float[]{
             0,
             0.6f,
             0.6f + 0.4f * 0.4f,
             0.6f,
             0.6f,
             0.6f + 0.4f * 0.4f * 0.6f,
-            0.6f + 0.4f * 0.4f * 0.4f * 0.4f + 0.4f * 0.4f * 0.6f,
             0.6f + 0.4f * 0.4f * 0.6f,
+            0.6f + 0.4f * 0.4f * 0.6f
+    };
+    float[] posY8 = new float[]{
+            0,
+            0.6f,
+            0.6f + 0.4f * 0.4f,
+            0.6f,
+            0.6f,
+            0.6f + 0.4f * 0.4f * 0.6f,
+            0.6f + 0.4f * 0.4f * 0.6f,
+            0.6f + 0.4f * 0.4f * 0.6f + 0.4f * 0.4f * 0.4f * 0.6f,
     };
 
     private static final String TAG = SnailAdapterView.class.getSimpleName();
@@ -53,23 +65,28 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
     private int mMaxVisibleItemsQuantity;
     private int mMaxAnimatableItemsQuantity;
     private int mItemPadding;
+
+    public int getPosition() {
+        return mPosition;
+    }
+
     private int mPosition;
     //    private final LinkedList<View> mItemViews = new LinkedList<View>();
     private Context mCtx;
 
-    private AnimatorSet mMoveAnimation = new AnimatorSet();
+    private volatile AnimatorSet mMoveAnimation;
     private ObjectAnimator mLayoutAnimator = new ObjectAnimator();
-    private ObjectAnimator mInvalidateAnimator = new ObjectAnimator();
-    private ObjectAnimator mStubAnimator = new ObjectAnimator();
+    //    private ObjectAnimator mInvalidateAnimator = new ObjectAnimator();
 
 
-    //    private static Interpolator sOversotInterpolator = new OvershootInterpolator(3f);
+    private static Interpolator sOversotInterpolator = new OvershootInterpolator(3f);
     private static Interpolator sMoveInterpolator = new LinearInterpolator();
     //            private static Interpolator sMoveInterpolator = new OvershootInterpolator(3f);
-//    private static Interpolator sFinishingInterpolator = new DecelerateInterpolator(3f);
+    private static Interpolator sFinishingInterpolator = new DecelerateInterpolator();
     private boolean isAnimateInfininy = false;
     private View mInfinitieView;
-    private ArrayList<View> mAnimatedObjectsList;
+    private LinkedList<View> mAnimatedObjectsList;
+    private OnScrollListener mScrollListener;
 
     private class LayoutParams extends ViewGroup.LayoutParams {
         private ObjectAnimator mExpandDirX = new ObjectAnimator();
@@ -77,9 +94,7 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
         private ObjectAnimator mWidthAnimator = new ObjectAnimator();
         private ObjectAnimator mHeightAnimator = new ObjectAnimator();
 
-        private int mPosition;
-
-//        private boolean animationsSetToPlay;
+//        private int mPosition;
 
         public LayoutParams(ViewGroup.LayoutParams source) {
             super(source);
@@ -94,13 +109,10 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
 
         public void setWidtha(float w) {
             width = (int) w;
-//            requestLayout();
         }
 
         public void setHeighta(float h) {
             height = (int) h;
-            //todo add extra animator just for requesting layout to prevent extra requesting
-//            requestLayout();
         }
 
         public float getWidtha() {
@@ -168,50 +180,45 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
         }
         attr.recycle();
         mMaxAnimatableItemsQuantity = (!isAnimateInfininy) ? mMaxVisibleItemsQuantity - 1 : mMaxVisibleItemsQuantity;
-        mAnimatedObjectsList = new ArrayList<View>();
-        mMoveAnimation.setInterpolator(sMoveInterpolator);
+        mAnimatedObjectsList = new LinkedList<View>();
 
         mLayoutAnimator.setPropertyName("request");
         mLayoutAnimator.setFloatValues(0, 1f);
         mLayoutAnimator.setTarget(this);
-        mInvalidateAnimator.setPropertyName("invalidate");
-        mInvalidateAnimator.setTarget(this);
-        mInvalidateAnimator.setFloatValues(0, 1f);
-        mStubAnimator.setFloatValues(0, 1f);
-    }
-
-    public float getRequest() {
-        return 0;
+        mLayoutAnimator.addListener(mAnimationListener);
     }
 
     public void setRequest(float w) {
+        measureItems();
         requestLayout();
     }
-
-    public void setInvalidate(float w) {
-        if (w == 1f) {
-            reinitChild();
-//            remesureAllChilds();
-        }
-    }
-
 
     private Animator.AnimatorListener mAnimationListener = new Animator.AnimatorListener() {
         @Override
         public void onAnimationStart(Animator animation) {
-
+            mPosition++;
+            if (mPosition == mAdapter.getCount()) {
+                mPosition = 0;
+            }
         }
 
         @Override
         public void onAnimationEnd(Animator animation) {
-            mMoveAnimation.removeAllListeners();
-//            mMoveAnimation.end();
 
-            Log.d(TAG, "onAnimationEnd");
-            if (mPosition != mScrollTo) {
-                setSelection(mScrollTo);
-            }
-//            requestLayout();
+//            mLayoutAnimator.removeAllListeners();
+            post(new Runnable() {
+                @Override
+                public void run() {
+                    reinitChild();
+                    if (mPosition != mScrollTo) {
+                        setSelection(mScrollTo);
+                    } else {
+                        if (mScrollListener != null) {
+                            mScrollListener.onScrolledToPos(mPosition, mAnimatedObjectsList.get(0));
+                        }
+                    }
+                }
+            });
         }
 
 
@@ -222,18 +229,18 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
 
         @Override
         public void onAnimationRepeat(Animator animation) {
+            Log.d(TAG, "OnAnimationRepeat");
 
         }
     };
 
     private void reinitChild() {
-//        for (int i = 0; i < mAnimatedObjectsList.size(); i++) {
-        int index = (mPosition - 1) % mMaxAnimatableItemsQuantity;
         final int i = (mPosition + mMaxAnimatableItemsQuantity - 1) % mAdapter.getCount();
-        View v = mAdapter.getView((i) % mAdapter.getCount(), mAnimatedObjectsList.get(index == -1 ? index + mMaxAnimatableItemsQuantity : index), null);
-        measureChild(v, mMaxAnimatableItemsQuantity - 1);
-        ((LayoutParams) v.getLayoutParams()).mPosition = i;
-
+        Log.d(TAG, "add new item " + i);
+        View convertView = mAnimatedObjectsList.pop();
+        View v = mAdapter.getView(i, convertView, null);
+        reMeasureChild(v, mMaxAnimatableItemsQuantity - 1);
+        mAnimatedObjectsList.add(v);
         v.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -264,7 +271,6 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
             mDataSetObserver = new DataSetObserver() {
                 @Override
                 public void onChanged() {
-                    initScroller();
                     onDataChange();
                 }
 
@@ -275,10 +281,6 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
             };
         }
         mAdapter.registerDataSetObserver(mDataSetObserver);
-    }
-
-    private void initScroller() {
-
     }
 
     protected void initAdapter() {
@@ -297,16 +299,15 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
             mAdapter.notifyDataSetChanged();
             fillList();
         }
-        measureItems();
         layoutsItems();
     }
 
     private void measureItems() {
-//        for (int i = mPosition; i < mPosition+ mMaxAnimatableItemsQuantity; i++) {
-//
-//            View newChild = mAnimatedObjectsList.get(i% mMaxAnimatableItemsQuantity);
-//            measureChild(newChild, i% mMaxAnimatableItemsQuantity);
-//        }
+        for (int i = 0; i < mMaxAnimatableItemsQuantity; i++) {
+            View child = mAnimatedObjectsList.pollLast();
+            reMeasureChild(child, i);
+            mAnimatedObjectsList.addFirst(child);
+        }
     }
 
     @Override
@@ -321,7 +322,6 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
         //TODO start scrolling
         mScrollTo = position;
         if (mMoveAnimation != null) {
-            mMoveAnimation.removeAllListeners();
             if (mMoveAnimation.isRunning()) {
                 mMoveAnimation.end();
                 mMoveAnimation.cancel();
@@ -330,31 +330,35 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
         }
         mMoveAnimation = new AnimatorSet();
         mMoveAnimation.setInterpolator(sMoveInterpolator);
-        mInvalidateAnimator.setDuration(0);
+        if (Math.abs(mPosition - mScrollTo) == 1) {
+            mMoveAnimation.setInterpolator(sFinishingInterpolator);
+            mMoveAnimation.setDuration(400);
+        } else {
+            mMoveAnimation.setDuration(250);
+        }
         View to = mAnimatedObjectsList.get(0);
-
-        LayoutParams layoutParams = (LayoutParams) to.getLayoutParams();
-        AnimatorSet.Builder play = mMoveAnimation.play(mStubAnimator);
-
+        LinkedList al = new LinkedList();
         for (int i = 1; i < mMaxAnimatableItemsQuantity; i++) {
             View witch = mAnimatedObjectsList.get(i);
-            animate(to, play, witch);
+            animate(to, al, witch);
             to = witch;
         }
         View witch = mAnimatedObjectsList.get(0);
-        animate(to, play, witch);
-        play.with(mLayoutAnimator).before(mInvalidateAnimator);
-        mMoveAnimation.addListener(mAnimationListener);
+        animate(to, al, witch);
+
+        al.add(mLayoutAnimator);
+        mMoveAnimation.playTogether(al);
         mMoveAnimation.start();
-
-        mPosition++;
-        if (mPosition == mAdapter.getCount()) {
-            mPosition = 0;
-        }
-
     }
 
-    private void animate(View to, AnimatorSet.Builder play, View witch) {
+    public void setSelectionSilent(int position) {
+        //TODO start scrolling
+        mScrollTo = position;
+        mPosition = position;
+        onDataChange();
+    }
+
+    private void animate(View to, LinkedList al, View witch) {
         LayoutParams layoutParams;
         layoutParams = (LayoutParams) witch.getLayoutParams();
         layoutParams.mExpandDirX.setFloatValues(witch.getX(), to.getX());
@@ -365,14 +369,19 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
         layoutParams.mExpandDirX.setTarget(witch);
         layoutParams.mExpandDirY.setTarget(witch);
 
-        play.with(layoutParams.mExpandDirX);
-        play.with(layoutParams.mExpandDirY);
-        play.with(layoutParams.mWidthAnimator);
-        play.with(layoutParams.mHeightAnimator);
+        al.add(layoutParams.mExpandDirX);
+        al.add(layoutParams.mExpandDirY);
+        al.add(layoutParams.mWidthAnimator);
+        al.add(layoutParams.mHeightAnimator);
+
+    }
+
+    public void setOnScrellListener(OnScrollListener listener) {
+        mScrollListener = listener;
     }
 
     private void fillList() {
-        Log.i(TAG, "fillList()");
+//        Log.i(TAG, "fillList()");
         View newChild = null;
         removeAllViewsInLayout();
         mAnimatedObjectsList.clear();
@@ -415,14 +424,6 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
     public int getPositionForView(View view) {
         return super.getPositionForView(view);
     }
-    //
-//    private void remesureAllChilds() {
-//        for (int i = 0; i < getChildCount(); i++) {
-//            View child = getChildAt(i);
-//            measureChild(child, i);
-//        }
-//        requestLayout();
-//    }
 
     private void addChildInLayout(final View child) {
         LayoutParams params = (LayoutParams) child.getLayoutParams();
@@ -433,7 +434,7 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
     }
 
     private void measureChild(final View child, int i) {
-        Log.v(TAG, "measureChild()");
+//        Log.v(TAG, "measureChild()");
         float w = getWidthByIndex(i, mMaxVisibleItemsQuantity) * getWidth() - mItemPadding;
         float h = getHeightByIndex(i, mMaxVisibleItemsQuantity) * getHeight() - mItemPadding;
         int widthMeashure = MeasureSpec.makeMeasureSpec((int) w, MeasureSpec.EXACTLY);
@@ -445,6 +446,17 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
         }
     }
 
+    private void reMeasureChild(final View child, int i) {
+//        Log.v(TAG, "measureChild()");
+        float h = child.getLayoutParams().height;
+        float w = child.getLayoutParams().width;
+        int widthMeashure = MeasureSpec.makeMeasureSpec((int) w, MeasureSpec.EXACTLY);
+        int heightMeashure = MeasureSpec.makeMeasureSpec((int) h, MeasureSpec.EXACTLY);
+        if (child != null) {
+            child.measure(widthMeashure, heightMeashure);
+        }
+    }
+
     public static float getWidthByIndex(int i, int n) {
         return (float) (Math.pow(0.4f, i / 2) * (((i + 1) % 2 == 0 && i < n - 1) ? 0.6f : 1f));
     }
@@ -453,17 +465,20 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
         float v = (float) (Math.pow(0.4f, (i + 1) / 2) * (((i + 4) % 2 == 0 && i < n - 1) ? 0.6f : 1f));
         //FIX ME it is anoying but tests should pass
         return v;
-//        return v * ((i == 6 && n == 7) ? 0.6f : 1f);
+//        } else{
+//                return v * ((i == 6 && n == 7) ? 0.6f : 1f);
+//            }
     }
 
     private void layoutsItems() {
-        Log.v(TAG, "layoutsItems()");
+//        Log.v(TAG, "layoutsItems()");
         for (int i = 0, a = getChildCount(); i < a; i++) {
             final View child = getChildAt(i);
             float r = child.getLayoutParams().width;
             float b = child.getLayoutParams().height;
             float l = (posX[i] * getWidth()) + mItemPadding / 2;
-            float t = (posY[i] * getHeight()) + mItemPadding / 2;
+            float[] y = (mMaxVisibleItemsQuantity == 7) ? posY7 : posY8;
+            float t = (y[i] * getHeight()) + mItemPadding / 2;
             child.layout((int) l, (int) t, (int) (l + r), (int) (t + b));
         }
     }
@@ -478,6 +493,21 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
 
     private void onDataChange() {
         Log.v(TAG, "onDataChange()");
+        for (int i = 0, a = mAnimatedObjectsList.size(); i < a; i++) {
+            View child = mAnimatedObjectsList.get(i);
+            child = mAdapter.getView(mPosition + i, child, null);
+            final int finalPos = i + mPosition;
+            child.setOnClickListener(new OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    OnItemClickListener onItemClickListener = getOnItemClickListener();
+                    if (onItemClickListener != null) {
+                        onItemClickListener.onItemClick(SnailAdapterView.this, v, finalPos, -1);
+                    }
+                }
+            });
+            reMeasureChild(child, i);
+        }
         requestLayout();
     }
 
