@@ -65,6 +65,7 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
     private int mMaxVisibleItemsQuantity;
     private int mMaxAnimatableItemsQuantity;
     private int mItemPadding;
+    private Direction mDirection = Direction.FORWARD;
 
     public int getPosition() {
         return mPosition;
@@ -196,9 +197,16 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
     private Animator.AnimatorListener mAnimationListener = new Animator.AnimatorListener() {
         @Override
         public void onAnimationStart(Animator animation) {
-            mPosition++;
+            if (mDirection == Direction.FORWARD) {
+                mPosition++;
+            } else {
+                mPosition--;
+            }
             if (mPosition == mAdapter.getCount()) {
                 mPosition = 0;
+            }
+            if (mPosition == -1) {
+                mPosition = mAdapter.getCount()-1;
             }
         }
 
@@ -211,7 +219,11 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
                 public void run() {
                     reinitChild();
                     if (mPosition != mScrollTo) {
-                        setSelection(mScrollTo);
+                        if (mDirection == Direction.FORWARD) {
+                            setSelection(mScrollTo);
+                        } else {
+                            setSelectionBack(mScrollTo);
+                        }
                     } else {
                         if (mScrollListener != null) {
                             mScrollListener.onScrolledToPos(mPosition, mAnimatedObjectsList.get(0));
@@ -235,12 +247,23 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
     };
 
     private void reinitChild() {
-        final int i = (mPosition + mMaxAnimatableItemsQuantity - 1) % mAdapter.getCount();
-        Log.d(TAG, "add new item " + i);
-        View convertView = mAnimatedObjectsList.pop();
-        View v = mAdapter.getView(i, convertView, null);
-        reMeasureChild(v, mMaxAnimatableItemsQuantity - 1);
-        mAnimatedObjectsList.add(v);
+            final int i;
+        View v;
+        if (mDirection == Direction.FORWARD) {
+            i = (mPosition + mMaxAnimatableItemsQuantity - 1) % mAdapter.getCount();
+            Log.d(TAG, "add new item " + i);
+            View convertView = mAnimatedObjectsList.pop();
+            v = mAdapter.getView(i, convertView, null);
+            reMeasureChild(v, mMaxAnimatableItemsQuantity - 1);
+            mAnimatedObjectsList.add(v);
+        } else {
+            i = mPosition % mAdapter.getCount();
+            Log.d(TAG, "add new item " + i);
+            View convertView = mAnimatedObjectsList.pollLast();
+            v = mAdapter.getView(i, convertView, null);
+            reMeasureChild(v, 0);
+            mAnimatedObjectsList.addFirst(v);
+        }
         v.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -321,6 +344,7 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
     public void setSelection(int position) {
         //TODO start scrolling
         mScrollTo = position;
+        mDirection = Direction.FORWARD;
         if (mMoveAnimation != null) {
             if (mMoveAnimation.isRunning()) {
                 mMoveAnimation.end();
@@ -336,15 +360,74 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
         } else {
             mMoveAnimation.setDuration(250);
         }
-        View to = mAnimatedObjectsList.get(0);
+
         LinkedList al = new LinkedList();
-        for (int i = 1; i < mMaxAnimatableItemsQuantity; i++) {
-            View witch = mAnimatedObjectsList.get(i);
+        for (int i = 0; i < mMaxAnimatableItemsQuantity; i++) {
+            View witch = mAnimatedObjectsList.pollFirst();
+            View to = mAnimatedObjectsList.getLast();
             animate(to, al, witch);
-            to = witch;
+            mAnimatedObjectsList.addLast(witch);
         }
-        View witch = mAnimatedObjectsList.get(0);
-        animate(to, al, witch);
+
+//
+//        View to = mAnimatedObjectsList.get(0);
+//        for (int i = 1; i < mMaxAnimatableItemsQuantity; i++) {
+//            View witch = mAnimatedObjectsList.get(i);
+//            animate(to, al, witch);
+//            to = witch;
+//        }
+//        View witch = mAnimatedObjectsList.get(0);
+//        animate(to, al, witch);
+
+        al.add(mLayoutAnimator);
+        mMoveAnimation.playTogether(al);
+        mMoveAnimation.start();
+    }
+
+    public enum Direction {
+        FORWARD,
+        BACKWARD
+    }
+
+    public void setSelectionBack(int position) {
+        //TODO start scrolling
+        mScrollTo = position;
+        mDirection = Direction.BACKWARD;
+        if (mMoveAnimation != null) {
+            if (mMoveAnimation.isRunning()) {
+                mMoveAnimation.end();
+                mMoveAnimation.cancel();
+                mMoveAnimation = null;
+            }
+        }
+        mMoveAnimation = new AnimatorSet();
+        mMoveAnimation.setInterpolator(sMoveInterpolator);
+        if (Math.abs(mPosition - mScrollTo) == 1) {
+            mMoveAnimation.setInterpolator(sFinishingInterpolator);
+            mMoveAnimation.setDuration(400);
+        } else {
+            mMoveAnimation.setDuration(250);
+        }
+        LinkedList al = new LinkedList();
+
+
+        for (int i = 0; i < mMaxAnimatableItemsQuantity; i++) {
+            View witch = mAnimatedObjectsList.pollLast();
+            View to = mAnimatedObjectsList.getFirst();
+            animate(to, al, witch);
+            mAnimatedObjectsList.addFirst(witch);
+        }
+
+
+//
+//
+//        for (int i = 1; i < mMaxAnimatableItemsQuantity; i++) {
+//            View witch = mAnimatedObjectsList.get(i);
+//            animate(to, al, witch);
+//            to = witch;
+//        }
+//        View witch = mAnimatedObjectsList.get(0);
+//        animate(to, al, witch);
 
         al.add(mLayoutAnimator);
         mMoveAnimation.playTogether(al);

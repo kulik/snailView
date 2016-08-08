@@ -10,29 +10,34 @@ import android.widget.Toast;
 import com.tac.kulik.snail.OnScrollListener;
 import com.tac.kulik.snail.SnailAdapterView;
 
-import java.util.Arrays;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.NoSuchElementException;
 import java.util.Random;
-import java.util.concurrent.ThreadLocalRandom;
 
 public class MainActivity extends Activity {
+
+    private Deque<Integer> backNavigationStack = new ArrayDeque<>();
+    private SnailAdapterView viewById;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        final SnailAdapterView viewById = (SnailAdapterView) findViewById(R.id.snailview);
+        viewById = (SnailAdapterView) findViewById(R.id.snailview);
         final SnailAdapter adapter = new SnailAdapter(this);
         viewById.setAdapter(adapter);
         viewById.setOnScrellListener(new OnScrollListener() {
             @Override
             public void onScrolledToPos(int pos, View view) {
-                Log.d("scrolled","scrolled to " + pos);
+                Log.d("scrolled", "scrolled to " + pos);
             }
         });
         viewById.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
 //                Log.d("goto", "goto " + i);
+                backNavigationStack.push(viewById.getPosition());
                 viewById.setSelection(i);
 
             }
@@ -52,12 +57,20 @@ public class MainActivity extends Activity {
         });
     }
 
-    public static void shuffleArray(int[] ar)
-    {
+    @Override
+    public void onBackPressed() {
+        try {
+            Integer pop = backNavigationStack.pop();
+            viewById.setSelectionBack(pop);
+        } catch (NoSuchElementException e) {
+            Toast.makeText(this, "Backsteck is full", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    public static void shuffleArray(int[] ar) {
         // If running on Java 6 or older, use `new Random()` on RHS here
         Random rnd = new Random();
-        for (int i = ar.length - 1; i > 0; i--)
-        {
+        for (int i = ar.length - 1; i > 0; i--) {
             int index = rnd.nextInt(i + 1);
             // Simple swap
             int a = ar[index];
