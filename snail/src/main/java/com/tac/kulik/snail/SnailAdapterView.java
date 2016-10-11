@@ -356,9 +356,9 @@ public class SnailAdapterView extends AdapterView<BaseAdapter> {
         mMoveAnimation.setInterpolator(sMoveInterpolator);
         if (Math.abs(mPosition - mScrollTo) == 1) {
             mMoveAnimation.setInterpolator(sFinishingInterpolator);
-            mMoveAnimation.setDuration(400);
+            mMoveAnimation.setDuration(600);
         } else {
-            mMoveAnimation.setDuration(250);
+            mMoveAnimation.setDuration(400);
         }
 
         LinkedList al = new LinkedList();
